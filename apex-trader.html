@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>APEX//TRADER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #080c10; color: #e0e8f0; font-family: 'IBM Plex Mono', monospace; min-height: 100vh; }
+header { background: #0e1419; border-bottom: 1px solid #1a2530; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+.logo { font-size: 20px; font-weight: 700; color: #00ff88; letter-spacing: 3px; }
+.subtitle { font-size: 10px; color: #334; letter-spacing: 2px; margin-top: 2px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00ff88; display: inline-block; animation: pulse 1.5s infinite; margin-right: 6px; }
+.status-text { font-size: 11px; color: #00ff88; letter-spacing: 1px; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,0.4)} 50%{box-shadow:0 0 0 8px rgba(0,255,136,0)} }
+@keyframes slideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+.card { background: #0e1419; border: 1px solid #1a2530; padding: 16px; border-radius: 2px; }
+.card-label { font-size: 9px; color: #445; letter-spacing: 2px; margin-bottom: 8px; }
+.card-value { font-size: 24px; font-weight: 700; }
+.card-sub { font-size: 11px; color: #556; margin-top: 4px; }
+.progress-wrap { padding: 0 24px 20px; max-width: 1100px; margin: 0 auto; }
+.progress-card { background: #0e1419; border: 1px solid #1a2530; padding: 16px; border-radius: 2px; }
+.progress-bar-bg { background: #0a0f14; height: 6px; border-radius: 1px; overflow: hidden; margin: 8px 0 4px; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, #00aaff, #00ff88); transition: width 0.5s ease; box-shadow: 0 0 10px #00ff8844; }
+.controls { padding: 0 24px 20px; max-width: 1100px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+.btn { cursor: pointer; border: none; font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: 1px; padding: 10px 24px; border-radius: 2px; transition: all 0.15s; }
+.btn-refresh { background: #00aaff; color: #000; }
+.btn-refresh:hover { background: #33bbff; }
+.btn-reset { background: transparent; color: #556; border: 1px solid #1a2530; }
+.btn-reset:hover { border-color: #334; color: #99a; }
+.hint { font-size: 11px; color: #445; margin-left: 8px; }
+.tabs { padding: 0 24px; max-width: 1100px; margin: 0 auto; border-bottom: 1px solid #1a2530; display: flex; }
+.tab { cursor: pointer; padding: 8px 16px; font-size: 11px; letter-spacing: 1px; border-bottom: 2px solid transparent; color: #556; transition: all 0.15s; font-family: inherit; }
+.tab.active { color: #00aaff; border-color: #00aaff; }
+.content { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+.log-box { background: #0e1419; border: 1px solid #1a2530; border-radius: 2px; padding: 16px; min-height: 300px; max-height: 420px; overflow-y: auto; }
+.log-row { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #0a0f14; font-size: 12px; animation: slideIn 0.3s ease; }
+.log-time { color: #334; min-width: 70px; flex-shrink: 0; font-size: 10px; }
+.log-type { min-width: 60px; flex-shrink: 0; font-size: 10px; font-weight: 600; letter-spacing: 1px; }
+.log-msg { color: #aab; line-height: 1.5; }
+.holding-row { background: #0e1419; border: 1px solid #1a2530; border-radius: 2px; padding: 16px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+.holding-sym { font-size: 16px; font-weight: 700; }
+.holding-shares { font-size: 10px; color: #445; margin-top: 4px; }
+.col-label { font-size: 10px; color: #445; letter-spacing: 1px; }
+.col-val { font-size: 14px; margin-top: 2px; }
+.trade-row { display: grid; grid-template-columns: 100px 80px 1fr 100px 100px; padding: 10px 16px; border-bottom: 1px solid #0a0f14; font-size: 12px; }
+.trade-header { display: grid; grid-template-columns: 100px 80px 1fr 100px 100px; padding: 10px 16px; border-bottom: 1px solid #1a2530; font-size: 9px; color: #445; letter-spacing: 1px; }
+.empty { color: #334; font-size: 12px; text-align: center; padding: 60px; }
+.footer { text-align: center; padding: 20px; font-size: 9px; color: #223; letter-spacing: 1px; }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0e1419; } ::-webkit-scrollbar-thumb { background: #1a2530; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">APEX//TRADER</div>
+    <div class="subtitle">24/7 AI TRADING BOT</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-text" id="statusText">CONNECTING...</span>
+    <span style="font-size:10px;color:#334;margin-left:12px" id="lastRefresh"></span>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-label">PORTFOLIO VALUE</div>
+    <div class="card-value" id="totalValue" style="color:#00ff88">$100.00</div>
+    <div class="card-sub" id="pnlPct">+0.00%</div>
+  </div>
+  <div class="card">
+    <div class="card-label">CASH</div>
+    <div class="card-value" id="cash" style="color:#00aaff">$100.00</div>
+    <div class="card-sub" id="cashPct">100% liquid</div>
+  </div>
+  <div class="card">
+    <div class="card-label">TOTAL P&L</div>
+    <div class="card-value" id="pnl" style="color:#00ff88">$0.00</div>
+    <div class="card-sub" id="peak">peak $100.00</div>
+  </div>
+  <div class="card">
+    <div class="card-label">TRADES</div>
+    <div class="card-value" id="tradeCount" style="color:#aab">0</div>
+    <div class="card-sub" id="lastCycle">last cycle: —</div>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-card">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span style="font-size:10px;color:#445;letter-spacing:2px">MISSION: $100 → $1000</span>
+      <span style="font-size:11px;color:#00ff88" id="progressPct">0% TO GOAL</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar" id="progressBar" style="width:10%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px">
+      <span style="font-size:9px;color:#334">$100</span>
+      <span style="font-size:9px;color:#334">$1000</span>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn btn-refresh" onclick="fetchState()">↻ REFRESH</button>
+  <button class="btn btn-reset" onclick="resetPortfolio()">↺ RESET TO $100</button>
+  <span class="hint">Bot trades every 5 min on server — always on</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('live', this)">LIVE</div>
+  <div class="tab" onclick="switchTab('portfolio', this)">PORTFOLIO</div>
+  <div class="tab" onclick="switchTab('history', this)">HISTORY</div>
+</div>
+
+<div class="content">
+  <div id="tab-live">
+    <div class="log-box" id="logBox">
+      <div class="empty">Connecting to server...</div>
+    </div>
+  </div>
+  <div id="tab-portfolio" style="display:none">
+    <div id="portfolioBox"><div class="empty">No open positions</div></div>
+  </div>
+  <div id="tab-history" style="display:none">
+    <div style="background:#0e1419;border:1px solid #1a2530;border-radius:2px;overflow:hidden">
+      <div class="trade-header"><span>TIME</span><span>ACTION</span><span>SYMBOL</span><span>SHARES</span><span>PRICE</span></div>
+      <div id="historyBox"><div class="empty">No trades yet</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">PAPER TRADING ONLY — NOT REAL MONEY — FOR EDUCATIONAL USE</div>
+
+<script>
+// ⚠️ REPLACE THIS WITH YOUR RAILWAY URL
+const API_URL = "apex-trader-production-bfbe.up.railway.app";
+
+const INITIAL = 100;
+let state = null;
+
+function usd(n) { return "$" + Number(n||0).toFixed(2); }
+function pct(n) { return (n>=0?"+":"")+Number(n||0).toFixed(2)+"%"; }
+
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['live','portfolio','history'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===name ? 'block' : 'none';
+  });
+}
+
+async function fetchState() {
+  try {
+    const res = await fetch(API_URL + "/state");
+    if (!res.ok) throw new Error("bad response");
+    state = await res.json();
+    document.getElementById('statusDot').style.background = '#00ff88';
+    document.getElementById('statusText').textContent = 'LIVE';
+    document.getElementById('lastRefresh').textContent = 'refreshed ' + new Date().toLocaleTimeString();
+    renderState();
+  } catch(e) {
+    document.getElementById('statusDot').style.background = '#ff3366';
+    document.getElementById('statusText').textContent = 'OFFLINE';
+    document.getElementById('logBox').innerHTML = '<div class="empty" style="color:#ff3366">⚠ Could not reach server. Check Railway is running.</div>';
+  }
+}
+
+async function resetPortfolio() {
+  if (!confirm("Reset portfolio back to $100?")) return;
+  await fetch(API_URL + "/reset", {method:"POST"});
+  await fetchState();
+}
+
+function renderState() {
+  if (!state) return;
+  const { cash=100, holdings={}, prices={}, trades=[], log=[], total_value=100, peak_value=100, last_cycle } = state;
+  const pnlVal = total_value - INITIAL;
+  const pnlPctVal = (pnlVal / INITIAL) * 100;
+  const isUp = pnlVal >= 0;
+  const progress = Math.min((total_value / 1000) * 100, 100);
+  const green = '#00ff88', red = '#ff3366', blue = '#00aaff';
+
+  document.getElementById('totalValue').textContent = usd(total_value);
+  document.getElementById('totalValue').style.color = isUp ? green : red;
+  document.getElementById('pnlPct').textContent = pct(pnlPctVal);
+  document.getElementById('cash').textContent = usd(cash);
+  document.getElementById('cashPct').textContent = Math.round((cash/total_value)*100) + '% liquid';
+  document.getElementById('pnl').textContent = usd(pnlVal);
+  document.getElementById('pnl').style.color = isUp ? green : red;
+  document.getElementById('peak').textContent = 'peak ' + usd(peak_value);
+  document.getElementById('tradeCount').textContent = trades.length;
+  document.getElementById('lastCycle').textContent = last_cycle ? 'last cycle: ' + new Date(last_cycle).toLocaleTimeString() : 'last cycle: —';
+  document.getElementById('progressBar').style.width = progress + '%';
+  document.getElementById('progressPct').textContent = progress.toFixed(1) + '% TO GOAL';
+
+  // Log
+  const logBox = document.getElementById('logBox');
+  if (!log.length) { logBox.innerHTML = '<div class="empty">Waiting for first trading cycle...</div>'; }
+  else {
+    logBox.innerHTML = [...log].reverse().map(e => `
+      <div class="log-row">
+        <span class="log-time">${new Date(e.time).toLocaleTimeString()}</span>
+        <span class="log-type" style="color:${e.type==='buy'?green:e.type==='sell'?red:blue}">${e.type==='buy'?'◆ BUY':e.type==='sell'?'◇ SELL':'● INFO'}</span>
+        <span class="log-msg">${e.message}</span>
+      </div>`).join('');
+  }
+
+  // Portfolio
+  const pb = document.getElementById('portfolioBox');
+  const syms = Object.keys(holdings);
+  if (!syms.length) { pb.innerHTML = '<div class="empty">No open positions</div>'; }
+  else {
+    pb.innerHTML = syms.map(sym => {
+      const {shares, avgCost} = holdings[sym];
+      const price = prices[sym] || avgCost;
+      const val = shares * price;
+      const p = (price - avgCost) * shares;
+      const pp = ((price - avgCost)/avgCost)*100;
+      return `<div class="holding-row">
+        <div><div class="holding-sym">${sym}</div><div class="holding-shares">${Number(shares).toFixed(4)} shares</div></div>
+        <div><div class="col-label">CURRENT</div><div class="col-val" style="color:#aab">${usd(price)}</div></div>
+        <div><div class="col-label">VALUE</div><div class="col-val" style="color:${blue}">${usd(val)}</div></div>
+        <div><div class="col-label">P&L</div><div class="col-val" style="color:${p>=0?green:red}">${usd(p)} (${pct(pp)})</div></div>
+      </div>`;
+    }).join('') + `<div style="background:#0e1419;border:1px solid #1a2530;border-radius:2px;padding:12px;margin-top:8px;display:flex;justify-content:space-between"><span style="font-size:11px;color:#445">CASH RESERVE</span><span style="font-size:14px;color:${blue};font-weight:600">${usd(cash)}</span></div>`;
+  }
+
+  // History
+  const hb = document.getElementById('historyBox');
+  if (!trades.length) { hb.innerHTML = '<div class="empty">No trades yet</div>'; }
+  else {
+    hb.innerHTML = [...trades].reverse().map(t => `
+      <div class="trade-row">
+        <span style="color:#334;font-size:10px">${new Date(t.time).toLocaleTimeString()}</span>
+        <span style="color:${t.action==='BUY'?green:red};font-weight:600;font-size:11px">${t.action}</span>
+        <span style="color:#aab">${t.symbol}</span>
+        <span style="color:#778">${Number(t.shares).toFixed(4)}</span>
+        <span style="color:#aab">${usd(t.price)}</span>
+      </div>`).join('');
+  }
+}
+
+fetchState();
+setInterval(fetchState, 15000);
+</script>
+
+</body>
+</html>
