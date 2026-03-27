@@ -127,15 +127,16 @@ Rules:
       }),
     });
 
-const data = await response.json();
-if (!data.content) {
-  console.error("Anthropic API error:", JSON.stringify(data));
-  return;
-}
-const textBlocks = data.content
-  .filter((b) => b.type === "text")
-  .map((b) => b.text)
-  .join("");
+    const data = await response.json();
+    if (!data.content) {
+      console.error("Anthropic API error:", JSON.stringify(data));
+      return;
+    }
+    const textBlocks = data.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+
     let parsed;
     try {
       const jsonMatch = textBlocks.match(/\{[\s\S]*\}/);
