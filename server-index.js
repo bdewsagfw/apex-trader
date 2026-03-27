@@ -120,19 +120,22 @@ Rules:
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-opus-4-5",
         max_tokens: 1000,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
-    const data = await response.json();
-    const textBlocks = data.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-
+const data = await response.json();
+if (!data.content) {
+  console.error("Anthropic API error:", JSON.stringify(data));
+  return;
+}
+const textBlocks = data.content
+  .filter((b) => b.type === "text")
+  .map((b) => b.text)
+  .join("");
     let parsed;
     try {
       const jsonMatch = textBlocks.match(/\{[\s\S]*\}/);
