@@ -1,52 +1,74 @@
 const express = require("express");
-const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
-
 const INITIAL_CASH = 100;
 const CYCLE_INTERVAL_MS = 5 * 60 * 1000;
 const TICKERS = ["NVDA", "TSLA", "AAPL", "AMD", "META", "MSTR", "COIN", "AMZN", "GOOGL", "MSFT"];
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+const JSONBIN_ID = process.env.JSONBIN_ID;
+const JSONBIN_KEY = process.env.JSONBIN_KEY;
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
+
+// ─── Fallback In-Memory State ─────────────────────────────────────────────────
+
+let memoryState = {
+  id: 1,
+  cash: INITIAL_CASH,
+  holdings: {},
+  prices: {},
+  trades: [],
+  log: [],
+  total_value: INITIAL_CASH,
+  peak_value: INITIAL_CASH,
+  created_at: new Date().toISOString(),
+  last_cycle: null,
+};
+
+// ─── JSONBin Helpers ──────────────────────────────────────────────────────────
 
 async function getState() {
-  const { data } = await supabase
-    .from("portfolio")
-    .select("*")
-    .eq("id", 1)
-    .single();
-
-  if (!data) {
-    const init = {
-      id: 1,
-      cash: INITIAL_CASH,
-      holdings: {},
-      prices: {},
-      trades: [],
-      log: [],
-      total_value: INITIAL_CASH,
-      peak_value: INITIAL_CASH,
-      created_at: new Date().toISOString(),
-    };
-    await supabase.from("portfolio").insert(init);
-    return init;
+  try {
+    const res = await fetch(JSONBIN_URL + "/latest", {
+      headers: { "X-Master-Key": JSONBIN_KEY },
+    });
+    const json = await res.json();
+    if (json.record) {
+      memoryState = json.record;
+      return json.record;
+    }
+  } catch (e) {
+    console.error("JSONBin read error:", e.message);
   }
-  return data;
+  return memoryState;
 }
 
 async function saveState(state) {
-  const { data, error } = await supabase.from("portfolio").upsert(state);
-  if (error) console.error("Supabase save error:", JSON.stringify(error));
-  else console.log("Supabase save success");
+  try {
+    memoryState = state;
+    const res = await fetch(JSONBIN_URL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Master-Key": JSONBIN_KEY,
+      },
+      body: JSON.stringify(state),
+    });
+    const json = await res.json();
+    if (json.record) {
+      console.log("JSONBin save success");
+    } else {
+      console.error("JSONBin save error:", JSON.stringify(json));
+    }
+  } catch (e) {
+    console.error("JSONBin save error:", e.message);
+  }
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function calcTotal(cash, holdings, prices) {
   let total = cash;
@@ -56,7 +78,7 @@ function calcTotal(cash, holdings, prices) {
   return total;
 }
 
-// ─── Fetch Prices from Yahoo Finance ────────────────────────────────────────
+// ─── Fetch Prices from Yahoo Finance ─────────────────────────────────────────
 
 async function fetchPrices(tickers) {
   const prices = {};
@@ -76,7 +98,7 @@ async function fetchPrices(tickers) {
   return prices;
 }
 
-// ─── Fetch Day Change % ──────────────────────────────────────────────────────
+// ─── Fetch Day Change % ───────────────────────────────────────────────────────
 
 async function fetchDayChange(ticker) {
   try {
@@ -95,7 +117,7 @@ async function fetchDayChange(ticker) {
   return 0;
 }
 
-// ─── Core Trading Cycle ──────────────────────────────────────────────────────
+// ─── Core Trading Cycle ───────────────────────────────────────────────────────
 
 async function runTradingCycle() {
   console.log(`[${new Date().toISOString()}] Running trading cycle...`);
@@ -103,7 +125,6 @@ async function runTradingCycle() {
   const state = await getState();
   let { cash, holdings, prices: existingPrices, trades, log } = state;
 
-  // Fetch current prices
   const fetchedPrices = await fetchPrices(TICKERS);
   const newPrices = { ...existingPrices, ...fetchedPrices };
 
@@ -112,7 +133,6 @@ async function runTradingCycle() {
     return;
   }
 
-  // Fetch day changes for all tickers
   const changes = {};
   for (const ticker of TICKERS) {
     changes[ticker] = await fetchDayChange(ticker);
@@ -124,15 +144,13 @@ async function runTradingCycle() {
   const newTrades = [...trades];
   const newLog = [...log];
 
-  // SELL any position that is currently unprofitable (current price < avg cost)
+  // SELL unprofitable positions
   for (const sym of Object.keys(newHoldings)) {
     const holding = newHoldings[sym];
     const price = newPrices[sym];
     if (!price) continue;
 
-    const isUnprofitable = price < holding.avgCost;
-
-    if (isUnprofitable) {
+    if (price < holding.avgCost) {
       const proceeds = holding.shares * price;
       newCash += proceeds;
       const pnl = (price - holding.avgCost) * holding.shares;
@@ -147,14 +165,12 @@ async function runTradingCycle() {
     }
   }
 
-  // BUY any ticker that is up today and we don't already hold
-  // Spread available cash evenly across all good opportunities
+  // BUY tickers up today
   const opportunities = TICKERS.filter(
     (t) => fetchedPrices[t] && changes[t] > 0.5 && !newHoldings[t]
   ).sort((a, b) => changes[b] - changes[a]);
 
   if (opportunities.length > 0 && newCash > 5) {
-    // Allocate up to 80% of cash, spread across opportunities (max 5 at a time)
     const maxNew = Math.min(opportunities.length, 5);
     const allocPerTicker = (newCash * 0.8) / maxNew;
 
@@ -199,7 +215,7 @@ async function runTradingCycle() {
   console.log(`Cycle complete. Portfolio value: $${newTotal.toFixed(2)}`);
 }
 
-// ─── API Routes ──────────────────────────────────────────────────────────────
+// ─── API Routes ───────────────────────────────────────────────────────────────
 
 app.get("/state", async (req, res) => {
   const state = await getState();
@@ -207,11 +223,23 @@ app.get("/state", async (req, res) => {
 });
 
 app.post("/reset", async (req, res) => {
-  await supabase.from("portfolio").delete().eq("id", 1);
+  const fresh = {
+    id: 1,
+    cash: INITIAL_CASH,
+    holdings: {},
+    prices: {},
+    trades: [],
+    log: [],
+    total_value: INITIAL_CASH,
+    peak_value: INITIAL_CASH,
+    created_at: new Date().toISOString(),
+    last_cycle: null,
+  };
+  await saveState(fresh);
   res.json({ ok: true });
 });
 
-// ─── Start ───────────────────────────────────────────────────────────────────
+// ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(3001, () => {
   console.log("Trading server running on port 3001");
