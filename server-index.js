@@ -18,7 +18,7 @@ const TICKERS = [
   "PLTR", "RKLB", "IONQ", "RGTI", "QUBT", "SOUN",
   // EV & speculative
   "RIVN", "LCID", "NIO", "XPEV", "SOFI",
-  // ETFs with high movement
+  // Leveraged ETFs
   "SQQQ", "TQQQ", "UVXY"
 ];
 
@@ -81,7 +81,7 @@ async function saveState(state) {
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function calcTotal(cash, holdings, prices) {
   let total = cash;
@@ -91,43 +91,53 @@ function calcTotal(cash, holdings, prices) {
   return total;
 }
 
-// ─── Fetch Prices from Yahoo Finance ─────────────────────────────────────────
+// ─── Parallel Price Fetching ──────────────────────────────────────────────────
 
-async function fetchPrices(tickers) {
-  const prices = {};
-  for (const ticker of tickers) {
-    try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-      });
-      const json = await res.json();
-      const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (price) prices[ticker] = price;
-    } catch (e) {
-      console.error(`Failed to fetch price for ${ticker}:`, e.message);
-    }
+async function fetchPriceForTicker(ticker) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`;
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const json = await res.json();
+    const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    return price ? { ticker, price } : null;
+  } catch (e) {
+    console.error(`Price fetch failed for ${ticker}:`, e.message);
+    return null;
   }
-  return prices;
 }
 
-// ─── Fetch Day Change % ───────────────────────────────────────────────────────
-
-async function fetchDayChange(ticker) {
+async function fetchDayChangeForTicker(ticker) {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2d`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const json = await res.json();
     const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
     if (closes && closes.length >= 2) {
       const prev = closes[closes.length - 2];
       const curr = closes[closes.length - 1];
-      return ((curr - prev) / prev) * 100;
+      return { ticker, change: ((curr - prev) / prev) * 100 };
     }
   } catch (e) {}
-  return 0;
+  return { ticker, change: 0 };
+}
+
+async function fetchAllPricesAndChanges(tickers) {
+  const [priceResults, changeResults] = await Promise.all([
+    Promise.all(tickers.map(fetchPriceForTicker)),
+    Promise.all(tickers.map(fetchDayChangeForTicker)),
+  ]);
+
+  const prices = {};
+  for (const result of priceResults) {
+    if (result) prices[result.ticker] = result.price;
+  }
+
+  const changes = {};
+  for (const result of changeResults) {
+    changes[result.ticker] = result.change;
+  }
+
+  return { prices, changes };
 }
 
 // ─── Core Trading Cycle ───────────────────────────────────────────────────────
@@ -138,7 +148,8 @@ async function runTradingCycle() {
   const state = await getState();
   let { cash, holdings, prices: existingPrices, trades, log } = state;
 
-  const fetchedPrices = await fetchPrices(TICKERS);
+  // Fetch all prices and changes in parallel
+  const { prices: fetchedPrices, changes } = await fetchAllPricesAndChanges(TICKERS);
   const newPrices = { ...existingPrices, ...fetchedPrices };
 
   if (Object.keys(fetchedPrices).length === 0) {
@@ -146,10 +157,6 @@ async function runTradingCycle() {
     return;
   }
 
-  const changes = {};
-  for (const ticker of TICKERS) {
-    changes[ticker] = await fetchDayChange(ticker);
-  }
   console.log("Day changes:", changes);
 
   let newCash = cash;
