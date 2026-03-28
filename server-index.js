@@ -7,7 +7,20 @@ app.use(express.json());
 
 const INITIAL_CASH = 100;
 const CYCLE_INTERVAL_MS = 5 * 60 * 1000;
-const TICKERS = ["NVDA", "TSLA", "AAPL", "AMD", "META", "MSTR", "COIN", "AMZN", "GOOGL", "MSFT"];
+const TICKERS = [
+  // Mega cap tech
+  "NVDA", "TSLA", "META", "AAPL", "AMZN", "GOOGL", "MSFT",
+  // AI & semiconductors
+  "AMD", "ARM", "INTC", "SMCI", "AVGO", "QCOM", "MU",
+  // Crypto-adjacent
+  "MSTR", "COIN", "HOOD", "RIOT", "MARA",
+  // High volatility growth
+  "PLTR", "RKLB", "IONQ", "RGTI", "QUBT", "SOUN",
+  // EV & speculative
+  "RIVN", "LCID", "NIO", "XPEV", "SOFI",
+  // ETFs with high movement
+  "SQQQ", "TQQQ", "UVXY"
+];
 
 const JSONBIN_ID = process.env.JSONBIN_ID;
 const JSONBIN_KEY = process.env.JSONBIN_KEY;
