@@ -43,7 +43,9 @@ async function getState() {
 }
 
 async function saveState(state) {
-  await supabase.from("portfolio").upsert(state);
+  const { data, error } = await supabase.from("portfolio").upsert(state);
+  if (error) console.error("Supabase save error:", JSON.stringify(error));
+  else console.log("Supabase save success");
 }
 
 function calcTotal(cash, holdings, prices) {
