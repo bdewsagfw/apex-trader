@@ -8,25 +8,17 @@ app.use(express.json());
 const INITIAL_CASH = 100;
 const CYCLE_INTERVAL_MS = 5 * 60 * 1000;
 const TICKERS = [
-  // Mega cap tech
   "NVDA", "TSLA", "META", "AAPL", "AMZN", "GOOGL", "MSFT",
-  // AI & semiconductors
   "AMD", "ARM", "INTC", "SMCI", "AVGO", "QCOM", "MU",
-  // Crypto-adjacent
   "MSTR", "COIN", "HOOD", "RIOT", "MARA",
-  // High volatility growth
   "PLTR", "RKLB", "IONQ", "RGTI", "QUBT", "SOUN",
-  // EV & speculative
   "RIVN", "LCID", "NIO", "XPEV", "SOFI",
-  // Leveraged ETFs
   "SQQQ", "TQQQ", "UVXY"
 ];
 
 const JSONBIN_ID = process.env.JSONBIN_ID;
 const JSONBIN_KEY = process.env.JSONBIN_KEY;
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
-
-// ─── Fallback In-Memory State ─────────────────────────────────────────────────
 
 let memoryState = {
   id: 1,
@@ -40,8 +32,6 @@ let memoryState = {
   created_at: new Date().toISOString(),
   last_cycle: null,
 };
-
-// ─── JSONBin Helpers ──────────────────────────────────────────────────────────
 
 async function getState() {
   try {
@@ -81,8 +71,6 @@ async function saveState(state) {
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function calcTotal(cash, holdings, prices) {
   let total = cash;
   for (const [sym, { shares }] of Object.entries(holdings)) {
@@ -90,8 +78,6 @@ function calcTotal(cash, holdings, prices) {
   }
   return total;
 }
-
-// ─── Parallel Price Fetching ──────────────────────────────────────────────────
 
 async function fetchPriceForTicker(ticker) {
   try {
@@ -140,15 +126,12 @@ async function fetchAllPricesAndChanges(tickers) {
   return { prices, changes };
 }
 
-// ─── Core Trading Cycle ───────────────────────────────────────────────────────
-
 async function runTradingCycle() {
   console.log(`[${new Date().toISOString()}] Running trading cycle...`);
 
   const state = await getState();
   let { cash, holdings, prices: existingPrices, trades, log } = state;
 
-  // Fetch all prices and changes in parallel
   const { prices: fetchedPrices, changes } = await fetchAllPricesAndChanges(TICKERS);
   const newPrices = { ...existingPrices, ...fetchedPrices };
 
@@ -174,14 +157,25 @@ async function runTradingCycle() {
       const proceeds = holding.shares * price;
       newCash += proceeds;
       const pnl = (price - holding.avgCost) * holding.shares;
+      const pnlPct = ((price - holding.avgCost) / holding.avgCost) * 100;
       delete newHoldings[sym];
-      newTrades.push({ action: "SELL", symbol: sym, shares: holding.shares, price, time: new Date().toISOString() });
+      newTrades.push({
+        action: "SELL",
+        symbol: sym,
+        shares: holding.shares,
+        price,
+        avgCost: holding.avgCost,
+        pnl,
+        pnlPct,
+        buyTime: holding.buyTime,
+        time: new Date().toISOString(),
+      });
       newLog.push({
         time: new Date().toISOString(),
         type: "sell",
-        message: `SELL ${sym} — ${holding.shares.toFixed(4)} shares @ $${price.toFixed(2)} | unprofitable, P&L $${pnl.toFixed(2)}`,
+        message: `SELL ${sym} — ${holding.shares.toFixed(4)} shares @ $${price.toFixed(2)} | P&L $${pnl.toFixed(2)} (${pnlPct.toFixed(2)}%)`,
       });
-      console.log(`SELL ${sym} (unprofitable, P&L $${pnl.toFixed(2)})`);
+      console.log(`SELL ${sym} P&L $${pnl.toFixed(2)}`);
     }
   }
 
@@ -200,11 +194,22 @@ async function runTradingCycle() {
       if (!price || allocPerTicker < 1) continue;
 
       const shares = allocPerTicker / price;
+      const buyTime = new Date().toISOString();
       newCash -= allocPerTicker;
-      newHoldings[sym] = { shares, avgCost: price };
-      newTrades.push({ action: "BUY", symbol: sym, shares, price, time: new Date().toISOString() });
+      newHoldings[sym] = { shares, avgCost: price, buyTime };
+      newTrades.push({
+        action: "BUY",
+        symbol: sym,
+        shares,
+        price,
+        avgCost: price,
+        pnl: 0,
+        pnlPct: 0,
+        buyTime,
+        time: buyTime,
+      });
       newLog.push({
-        time: new Date().toISOString(),
+        time: buyTime,
         type: "buy",
         message: `BUY ${sym} — ${shares.toFixed(4)} shares @ $${price.toFixed(2)} | up ${changes[sym].toFixed(2)}% today`,
       });
@@ -235,8 +240,6 @@ async function runTradingCycle() {
   console.log(`Cycle complete. Portfolio value: $${newTotal.toFixed(2)}`);
 }
 
-// ─── API Routes ───────────────────────────────────────────────────────────────
-
 app.get("/state", async (req, res) => {
   const state = await getState();
   res.json(state);
@@ -258,8 +261,6 @@ app.post("/reset", async (req, res) => {
   await saveState(fresh);
   res.json({ ok: true });
 });
-
-// ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(3001, () => {
   console.log("Trading server running on port 3001");
