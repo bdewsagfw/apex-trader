@@ -147,6 +147,9 @@ async function runTradingCycle() {
   const newTrades = [...trades];
   const newLog = [...log];
 
+  // Track which symbols were just sold to avoid rebuying same cycle
+  const justSold = new Set();
+
   // SELL unprofitable positions
   for (const sym of Object.keys(newHoldings)) {
     const holding = newHoldings[sym];
@@ -159,6 +162,7 @@ async function runTradingCycle() {
       const pnl = (price - holding.avgCost) * holding.shares;
       const pnlPct = ((price - holding.avgCost) / holding.avgCost) * 100;
       delete newHoldings[sym];
+      justSold.add(sym);
       newTrades.push({
         action: "SELL",
         symbol: sym,
@@ -179,9 +183,9 @@ async function runTradingCycle() {
     }
   }
 
-  // BUY tickers up today
+  // BUY tickers up today — skip any just sold this cycle
   const opportunities = TICKERS.filter(
-    (t) => fetchedPrices[t] && changes[t] > 0.5 && !newHoldings[t]
+    (t) => fetchedPrices[t] && changes[t] > 0.5 && !newHoldings[t] && !justSold.has(t)
   ).sort((a, b) => changes[b] - changes[a]);
 
   if (opportunities.length > 0 && newCash > 5) {
@@ -230,8 +234,8 @@ async function runTradingCycle() {
     cash: newCash,
     holdings: newHoldings,
     prices: newPrices,
-    trades: newTrades.slice(-200),
-    log: newLog.slice(-500),
+    trades: newTrades.slice(-2000), // increased to 2000
+    log: newLog.slice(-2000),
     total_value: newTotal,
     peak_value: Math.max(state.peak_value, newTotal),
     last_cycle: new Date().toISOString(),
