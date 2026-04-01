@@ -46,8 +46,10 @@ header { background: #0e1419; border-bottom: 1px solid #1a2530; padding: 16px 24
 .holding-shares { font-size: 10px; color: #445; margin-top: 4px; }
 .col-label { font-size: 10px; color: #445; letter-spacing: 1px; }
 .col-val { font-size: 14px; margin-top: 2px; }
-.trade-row { display: grid; grid-template-columns: 100px 80px 1fr 100px 100px; padding: 10px 16px; border-bottom: 1px solid #0a0f14; font-size: 12px; }
-.trade-header { display: grid; grid-template-columns: 100px 80px 1fr 100px 100px; padding: 10px 16px; border-bottom: 1px solid #1a2530; font-size: 9px; color: #445; letter-spacing: 1px; }
+.trade-table { background: #0e1419; border: 1px solid #1a2530; border-radius: 2px; overflow: hidden; }
+.trade-header { display: grid; grid-template-columns: 140px 70px 80px 90px 90px 90px 100px; padding: 10px 16px; border-bottom: 1px solid #1a2530; font-size: 9px; color: #445; letter-spacing: 1px; }
+.trade-row { display: grid; grid-template-columns: 140px 70px 80px 90px 90px 90px 100px; padding: 10px 16px; border-bottom: 1px solid #0a0f14; font-size: 12px; }
+.trade-row:last-child { border-bottom: none; }
 .empty { color: #334; font-size: 12px; text-align: center; padding: 60px; }
 .footer { text-align: center; padding: 20px; font-size: 9px; color: #223; letter-spacing: 1px; }
 ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0e1419; } ::-webkit-scrollbar-thumb { background: #1a2530; }
@@ -128,8 +130,16 @@ header { background: #0e1419; border-bottom: 1px solid #1a2530; padding: 16px 24
     <div id="portfolioBox"><div class="empty">No open positions</div></div>
   </div>
   <div id="tab-history" style="display:none">
-    <div style="background:#0e1419;border:1px solid #1a2530;border-radius:2px;overflow:hidden">
-      <div class="trade-header"><span>TIME</span><span>ACTION</span><span>SYMBOL</span><span>SHARES</span><span>PRICE</span></div>
+    <div class="trade-table">
+      <div class="trade-header">
+        <span>DATE & TIME</span>
+        <span>ACTION</span>
+        <span>SYMBOL</span>
+        <span>SHARES</span>
+        <span>PRICE</span>
+        <span>P&L</span>
+        <span>% CHANGE</span>
+      </div>
       <div id="historyBox"><div class="empty">No trades yet</div></div>
     </div>
   </div>
@@ -138,7 +148,6 @@ header { background: #0e1419; border-bottom: 1px solid #1a2530; padding: 16px 24
 <div class="footer">PAPER TRADING ONLY — NOT REAL MONEY — FOR EDUCATIONAL USE</div>
 
 <script>
-// ⚠️ REPLACE THIS WITH YOUR RAILWAY URL
 const API_URL = "https://apex-trader.onrender.com";
 
 const INITIAL = 100;
@@ -146,6 +155,12 @@ let state = null;
 
 function usd(n) { return "$" + Number(n||0).toFixed(2); }
 function pct(n) { return (n>=0?"+":"")+Number(n||0).toFixed(2)+"%"; }
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString();
+}
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -167,7 +182,7 @@ async function fetchState() {
   } catch(e) {
     document.getElementById('statusDot').style.background = '#ff3366';
     document.getElementById('statusText').textContent = 'OFFLINE';
-    document.getElementById('logBox').innerHTML = '<div class="empty" style="color:#ff3366">⚠ Could not reach server. Check Railway is running.</div>';
+    document.getElementById('logBox').innerHTML = '<div class="empty" style="color:#ff3366">⚠ Could not reach server.</div>';
   }
 }
 
@@ -183,7 +198,7 @@ function renderState() {
   const pnlVal = total_value - INITIAL;
   const pnlPctVal = (pnlVal / INITIAL) * 100;
   const isUp = pnlVal >= 0;
-  const progress = Math.min((total_value / 1000) * 100, 100);
+  const progress = Math.min(((total_value - INITIAL) / (1000 - INITIAL)) * 100, 100);
   const green = '#00ff88', red = '#ff3366', blue = '#00aaff';
 
   document.getElementById('totalValue').textContent = usd(total_value);
@@ -196,7 +211,7 @@ function renderState() {
   document.getElementById('peak').textContent = 'peak ' + usd(peak_value);
   document.getElementById('tradeCount').textContent = trades.length;
   document.getElementById('lastCycle').textContent = last_cycle ? 'last cycle: ' + new Date(last_cycle).toLocaleTimeString() : 'last cycle: —';
-  document.getElementById('progressBar').style.width = progress + '%';
+  document.getElementById('progressBar').style.width = Math.max(progress, 1) + '%';
   document.getElementById('progressPct').textContent = progress.toFixed(1) + '% TO GOAL';
 
   // Log
@@ -217,13 +232,17 @@ function renderState() {
   if (!syms.length) { pb.innerHTML = '<div class="empty">No open positions</div>'; }
   else {
     pb.innerHTML = syms.map(sym => {
-      const {shares, avgCost} = holdings[sym];
+      const {shares, avgCost, buyTime} = holdings[sym];
       const price = prices[sym] || avgCost;
       const val = shares * price;
       const p = (price - avgCost) * shares;
       const pp = ((price - avgCost)/avgCost)*100;
       return `<div class="holding-row">
-        <div><div class="holding-sym">${sym}</div><div class="holding-shares">${Number(shares).toFixed(4)} shares</div></div>
+        <div>
+          <div class="holding-sym">${sym}</div>
+          <div class="holding-shares">${Number(shares).toFixed(4)} shares</div>
+          <div style="font-size:9px;color:#334;margin-top:2px">bought ${buyTime ? new Date(buyTime).toLocaleDateString() : '—'}</div>
+        </div>
         <div><div class="col-label">CURRENT</div><div class="col-val" style="color:#aab">${usd(price)}</div></div>
         <div><div class="col-label">VALUE</div><div class="col-val" style="color:${blue}">${usd(val)}</div></div>
         <div><div class="col-label">P&L</div><div class="col-val" style="color:${p>=0?green:red}">${usd(p)} (${pct(pp)})</div></div>
@@ -235,14 +254,21 @@ function renderState() {
   const hb = document.getElementById('historyBox');
   if (!trades.length) { hb.innerHTML = '<div class="empty">No trades yet</div>'; }
   else {
-    hb.innerHTML = [...trades].reverse().map(t => `
-      <div class="trade-row">
-        <span style="color:#334;font-size:10px">${new Date(t.time).toLocaleTimeString()}</span>
-        <span style="color:${t.action==='BUY'?green:red};font-weight:600;font-size:11px">${t.action}</span>
-        <span style="color:#aab">${t.symbol}</span>
+    hb.innerHTML = [...trades].reverse().map(t => {
+      const isBuy = t.action === 'BUY';
+      const pnl = t.pnl || 0;
+      const pnlPct = t.pnlPct || 0;
+      const pnlColor = pnl >= 0 ? green : red;
+      return `<div class="trade-row">
+        <span style="color:#556;font-size:10px">${formatDate(t.time)}</span>
+        <span style="color:${isBuy?green:red};font-weight:600;font-size:11px">${t.action}</span>
+        <span style="color:#aab;font-weight:600">${t.symbol}</span>
         <span style="color:#778">${Number(t.shares).toFixed(4)}</span>
         <span style="color:#aab">${usd(t.price)}</span>
-      </div>`).join('');
+        <span style="color:${isBuy?'#556':pnlColor}">${isBuy?'—':usd(pnl)}</span>
+        <span style="color:${isBuy?'#556':pnlColor}">${isBuy?'—':pct(pnlPct)}</span>
+      </div>`;
+    }).join('');
   }
 }
 
