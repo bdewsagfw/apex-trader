@@ -81,7 +81,9 @@ export default function TradingBot() {
   const pnl = total_value - INITIAL_CASH;
   const pnlPct = (pnl / INITIAL_CASH) * 100;
   const isUp = pnl >= 0;
-  const progressToGoal = Math.min((total_value / 1000) * 100, 100);
+  const GOAL = 1000;
+const progressToGoal = ((total_value - INITIAL_CASH) / (GOAL - INITIAL_CASH)) * 100;
+const goalMet = total_value >= GOAL;
 
   const accentGreen = "#00ff88";
   const accentRed = "#ff3366";
